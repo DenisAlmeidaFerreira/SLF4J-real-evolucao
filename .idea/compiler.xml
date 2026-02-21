@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="slf4j-jdk14.module-compile" />
+        <module name="log4j-over-slf4j.module-compile" />
+        <module name="slf4j-migrator.module-compile" />
+        <module name="slf4j-simple.module-compile" />
+        <module name="osgi-over-slf4j.module-compile" />
+        <module name="slf4j-ext.module-compile" />
+        <module name="jul-to-slf4j.module-compile" />
+        <module name="slf4j-jdk-platform-logging.module-compile" />
+        <module name="slf4j-reload4j.module-compile" />
+        <module name="integration.module-compile" />
+        <module name="jcl-over-slf4j.module-compile" />
+        <module name="slf4j-api.module-compile" />
+        <module name="slf4j-nop.module-compile" />
+      </profile>
+      <profile name="Annotation profile for SLF4J BOM" enabled="true">
+        <sourceOutputDir name="../generated-sources/annotations" />
+        <sourceTestOutputDir name="../generated-test-sources/test-annotations" />
+        <module name="integration.main" />
+        <module name="osgi-over-slf4j.test" />
+        <module name="slf4j-jdk-platform-logging.main" />
+        <module name="jcl-over-slf4j.test" />
+        <module name="slf4j-reload4j.main" />
+        <module name="slf4j-simple.main" />
+        <module name="slf4j-ext.main" />
+        <module name="slf4j-jdk-platform-logging.test" />
+        <module name="log4j-over-slf4j.main" />
+        <module name="jcl-over-slf4j.main" />
+        <module name="jul-to-slf4j.test" />
+        <module name="slf4j-api.test" />
+        <module name="slf4j-nop.main" />
+        <module name="slf4j-jdk14.main" />
+        <module name="slf4j-reload4j.test" />
+        <module name="slf4j-simple.test" />
+        <module name="slf4j-migrator.main" />
+        <module name="slf4j-ext.test" />
+        <module name="slf4j-migrator.test" />
+        <module name="slf4j-jdk14.test" />
+        <module name="jul-to-slf4j.main" />
+        <module name="log4j-over-slf4j.test" />
+        <module name="integration.test" />
+        <module name="osgi-over-slf4j.main" />
+        <module name="slf4j-nop.test" />
+        <module name="slf4j-api.main" />
+      </profile>
+    </annotationProcessing>
+  </component>
+</project>
