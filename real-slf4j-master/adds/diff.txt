@@ -1,0 +1,1702 @@
+diff -ruN slf4j/.git/config real-slf4j-master/.git/config
+--- slf4j/.git/config	2026-02-21 12:51:06.232537203 -0300
++++ real-slf4j-master/.git/config	1969-12-31 21:00:00.000000000 -0300
+@@ -1,11 +0,0 @@
+-[core]
+-	repositoryformatversion = 0
+-	filemode = true
+-	bare = false
+-	logallrefupdates = true
+-[remote "origin"]
+-	url = https://github.com/qos-ch/slf4j.git
+-	fetch = +refs/heads/*:refs/remotes/origin/*
+-[branch "master"]
+-	remote = origin
+-	merge = refs/heads/master
+diff -ruN slf4j/.git/description real-slf4j-master/.git/description
+--- slf4j/.git/description	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/description	1969-12-31 21:00:00.000000000 -0300
+@@ -1 +0,0 @@
+-Unnamed repository; edit this file 'description' to name the repository.
+diff -ruN slf4j/.git/HEAD real-slf4j-master/.git/HEAD
+--- slf4j/.git/HEAD	2026-02-21 12:51:06.232537203 -0300
++++ real-slf4j-master/.git/HEAD	1969-12-31 21:00:00.000000000 -0300
+@@ -1 +0,0 @@
+-ref: refs/heads/master
+diff -ruN slf4j/.git/hooks/applypatch-msg.sample real-slf4j-master/.git/hooks/applypatch-msg.sample
+--- slf4j/.git/hooks/applypatch-msg.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/applypatch-msg.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,15 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to check the commit log message taken by
+-# applypatch from an e-mail message.
+-#
+-# The hook should exit with non-zero status after issuing an
+-# appropriate message if it wants to stop the commit.  The hook is
+-# allowed to edit the commit message file.
+-#
+-# To enable this hook, rename this file to "applypatch-msg".
+-
+-. git-sh-setup
+-commitmsg="$(git rev-parse --git-path hooks/commit-msg)"
+-test -x "$commitmsg" && exec "$commitmsg" ${1+"$@"}
+-:
+diff -ruN slf4j/.git/hooks/commit-msg.sample real-slf4j-master/.git/hooks/commit-msg.sample
+--- slf4j/.git/hooks/commit-msg.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/commit-msg.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,24 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to check the commit log message.
+-# Called by "git commit" with one argument, the name of the file
+-# that has the commit message.  The hook should exit with non-zero
+-# status after issuing an appropriate message if it wants to stop the
+-# commit.  The hook is allowed to edit the commit message file.
+-#
+-# To enable this hook, rename this file to "commit-msg".
+-
+-# Uncomment the below to add a Signed-off-by line to the message.
+-# Doing this in a hook is a bad idea in general, but the prepare-commit-msg
+-# hook is more suited to it.
+-#
+-# SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+-# grep -qs "^$SOB" "$1" || echo "$SOB" >> "$1"
+-
+-# This example catches duplicate Signed-off-by lines.
+-
+-test "" = "$(grep '^Signed-off-by: ' "$1" |
+-	 sort | uniq -c | sed -e '/^[ 	]*1[ 	]/d')" || {
+-	echo >&2 Duplicate Signed-off-by lines.
+-	exit 1
+-}
+diff -ruN slf4j/.git/hooks/fsmonitor-watchman.sample real-slf4j-master/.git/hooks/fsmonitor-watchman.sample
+--- slf4j/.git/hooks/fsmonitor-watchman.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/fsmonitor-watchman.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,109 +0,0 @@
+-#!/usr/bin/perl
+-
+-use strict;
+-use warnings;
+-use IPC::Open2;
+-
+-# An example hook script to integrate Watchman
+-# (https://facebook.github.io/watchman/) with git to speed up detecting
+-# new and modified files.
+-#
+-# The hook is passed a version (currently 1) and a time in nanoseconds
+-# formatted as a string and outputs to stdout all files that have been
+-# modified since the given time. Paths must be relative to the root of
+-# the working tree and separated by a single NUL.
+-#
+-# To enable this hook, rename this file to "query-watchman" and set
+-# 'git config core.fsmonitor .git/hooks/query-watchman'
+-#
+-my ($version, $time) = @ARGV;
+-
+-# Check the hook interface version
+-
+-if ($version == 1) {
+-	# convert nanoseconds to seconds
+-	# subtract one second to make sure watchman will return all changes
+-	$time = int ($time / 1000000000) - 1;
+-} else {
+-	die "Unsupported query-fsmonitor hook version '$version'.\n" .
+-	    "Falling back to scanning...\n";
+-}
+-
+-my $git_work_tree;
+-if ($^O =~ 'msys' || $^O =~ 'cygwin') {
+-	$git_work_tree = Win32::GetCwd();
+-	$git_work_tree =~ tr/\\/\//;
+-} else {
+-	require Cwd;
+-	$git_work_tree = Cwd::cwd();
+-}
+-
+-my $retry = 1;
+-
+-launch_watchman();
+-
+-sub launch_watchman {
+-
+-	my $pid = open2(\*CHLD_OUT, \*CHLD_IN, 'watchman -j --no-pretty')
+-	    or die "open2() failed: $!\n" .
+-	    "Falling back to scanning...\n";
+-
+-	# In the query expression below we're asking for names of files that
+-	# changed since $time but were not transient (ie created after
+-	# $time but no longer exist).
+-	#
+-	# To accomplish this, we're using the "since" generator to use the
+-	# recency index to select candidate nodes and "fields" to limit the
+-	# output to file names only.
+-
+-	my $query = <<"	END";
+-		["query", "$git_work_tree", {
+-			"since": $time,
+-			"fields": ["name"]
+-		}]
+-	END
+-
+-	print CHLD_IN $query;
+-	close CHLD_IN;
+-	my $response = do {local $/; <CHLD_OUT>};
+-
+-	die "Watchman: command returned no output.\n" .
+-	    "Falling back to scanning...\n" if $response eq "";
+-	die "Watchman: command returned invalid output: $response\n" .
+-	    "Falling back to scanning...\n" unless $response =~ /^\{/;
+-
+-	my $json_pkg;
+-	eval {
+-		require JSON::XS;
+-		$json_pkg = "JSON::XS";
+-		1;
+-	} or do {
+-		require JSON::PP;
+-		$json_pkg = "JSON::PP";
+-	};
+-
+-	my $o = $json_pkg->new->utf8->decode($response);
+-
+-	if ($retry > 0 and $o->{error} and $o->{error} =~ m/unable to resolve root .* directory (.*) is not watched/) {
+-		print STDERR "Adding '$git_work_tree' to watchman's watch list.\n";
+-		$retry--;
+-		qx/watchman watch "$git_work_tree"/;
+-		die "Failed to make watchman watch '$git_work_tree'.\n" .
+-		    "Falling back to scanning...\n" if $? != 0;
+-
+-		# Watchman will always return all files on the first query so
+-		# return the fast "everything is dirty" flag to git and do the
+-		# Watchman query just to get it over with now so we won't pay
+-		# the cost in git to look up each individual file.
+-		print "/\0";
+-		eval { launch_watchman() };
+-		exit 0;
+-	}
+-
+-	die "Watchman: $o->{error}.\n" .
+-	    "Falling back to scanning...\n" if $o->{error};
+-
+-	binmode STDOUT, ":utf8";
+-	local $, = "\0";
+-	print @{$o->{files}};
+-}
+diff -ruN slf4j/.git/hooks/post-update.sample real-slf4j-master/.git/hooks/post-update.sample
+--- slf4j/.git/hooks/post-update.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/post-update.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,8 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to prepare a packed repository for use over
+-# dumb transports.
+-#
+-# To enable this hook, rename this file to "post-update".
+-
+-exec git update-server-info
+diff -ruN slf4j/.git/hooks/pre-applypatch.sample real-slf4j-master/.git/hooks/pre-applypatch.sample
+--- slf4j/.git/hooks/pre-applypatch.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/pre-applypatch.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,14 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to verify what is about to be committed
+-# by applypatch from an e-mail message.
+-#
+-# The hook should exit with non-zero status after issuing an
+-# appropriate message if it wants to stop the commit.
+-#
+-# To enable this hook, rename this file to "pre-applypatch".
+-
+-. git-sh-setup
+-precommit="$(git rev-parse --git-path hooks/pre-commit)"
+-test -x "$precommit" && exec "$precommit" ${1+"$@"}
+-:
+diff -ruN slf4j/.git/hooks/pre-commit.sample real-slf4j-master/.git/hooks/pre-commit.sample
+--- slf4j/.git/hooks/pre-commit.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/pre-commit.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,49 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to verify what is about to be committed.
+-# Called by "git commit" with no arguments.  The hook should
+-# exit with non-zero status after issuing an appropriate message if
+-# it wants to stop the commit.
+-#
+-# To enable this hook, rename this file to "pre-commit".
+-
+-if git rev-parse --verify HEAD >/dev/null 2>&1
+-then
+-	against=HEAD
+-else
+-	# Initial commit: diff against an empty tree object
+-	against=$(git hash-object -t tree /dev/null)
+-fi
+-
+-# If you want to allow non-ASCII filenames set this variable to true.
+-allownonascii=$(git config --bool hooks.allownonascii)
+-
+-# Redirect output to stderr.
+-exec 1>&2
+-
+-# Cross platform projects tend to avoid non-ASCII filenames; prevent
+-# them from being added to the repository. We exploit the fact that the
+-# printable range starts at the space character and ends with tilde.
+-if [ "$allownonascii" != "true" ] &&
+-	# Note that the use of brackets around a tr range is ok here, (it's
+-	# even required, for portability to Solaris 10's /usr/bin/tr), since
+-	# the square bracket bytes happen to fall in the designated range.
+-	test $(git diff --cached --name-only --diff-filter=A -z $against |
+-	  LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0
+-then
+-	cat <<\EOF
+-Error: Attempt to add a non-ASCII file name.
+-
+-This can cause problems if you want to work with people on other platforms.
+-
+-To be portable it is advisable to rename the file.
+-
+-If you know what you are doing you can disable this check using:
+-
+-  git config hooks.allownonascii true
+-EOF
+-	exit 1
+-fi
+-
+-# If there are whitespace errors, print the offending file names and fail.
+-exec git diff-index --check --cached $against --
+diff -ruN slf4j/.git/hooks/pre-merge-commit.sample real-slf4j-master/.git/hooks/pre-merge-commit.sample
+--- slf4j/.git/hooks/pre-merge-commit.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/pre-merge-commit.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,13 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to verify what is about to be committed.
+-# Called by "git merge" with no arguments.  The hook should
+-# exit with non-zero status after issuing an appropriate message to
+-# stderr if it wants to stop the merge commit.
+-#
+-# To enable this hook, rename this file to "pre-merge-commit".
+-
+-. git-sh-setup
+-test -x "$GIT_DIR/hooks/pre-commit" &&
+-        exec "$GIT_DIR/hooks/pre-commit"
+-:
+diff -ruN slf4j/.git/hooks/prepare-commit-msg.sample real-slf4j-master/.git/hooks/prepare-commit-msg.sample
+--- slf4j/.git/hooks/prepare-commit-msg.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/prepare-commit-msg.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,42 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to prepare the commit log message.
+-# Called by "git commit" with the name of the file that has the
+-# commit message, followed by the description of the commit
+-# message's source.  The hook's purpose is to edit the commit
+-# message file.  If the hook fails with a non-zero status,
+-# the commit is aborted.
+-#
+-# To enable this hook, rename this file to "prepare-commit-msg".
+-
+-# This hook includes three examples. The first one removes the
+-# "# Please enter the commit message..." help message.
+-#
+-# The second includes the output of "git diff --name-status -r"
+-# into the message, just before the "git status" output.  It is
+-# commented because it doesn't cope with --amend or with squashed
+-# commits.
+-#
+-# The third example adds a Signed-off-by line to the message, that can
+-# still be edited.  This is rarely a good idea.
+-
+-COMMIT_MSG_FILE=$1
+-COMMIT_SOURCE=$2
+-SHA1=$3
+-
+-/usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' "$COMMIT_MSG_FILE"
+-
+-# case "$COMMIT_SOURCE,$SHA1" in
+-#  ,|template,)
+-#    /usr/bin/perl -i.bak -pe '
+-#       print "\n" . `git diff --cached --name-status -r`
+-# 	 if /^#/ && $first++ == 0' "$COMMIT_MSG_FILE" ;;
+-#  *) ;;
+-# esac
+-
+-# SOB=$(git var GIT_COMMITTER_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+-# git interpret-trailers --in-place --trailer "$SOB" "$COMMIT_MSG_FILE"
+-# if test -z "$COMMIT_SOURCE"
+-# then
+-#   /usr/bin/perl -i.bak -pe 'print "\n" if !$first_line++' "$COMMIT_MSG_FILE"
+-# fi
+diff -ruN slf4j/.git/hooks/pre-push.sample real-slf4j-master/.git/hooks/pre-push.sample
+--- slf4j/.git/hooks/pre-push.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/pre-push.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,53 +0,0 @@
+-#!/bin/sh
+-
+-# An example hook script to verify what is about to be pushed.  Called by "git
+-# push" after it has checked the remote status, but before anything has been
+-# pushed.  If this script exits with a non-zero status nothing will be pushed.
+-#
+-# This hook is called with the following parameters:
+-#
+-# $1 -- Name of the remote to which the push is being done
+-# $2 -- URL to which the push is being done
+-#
+-# If pushing without using a named remote those arguments will be equal.
+-#
+-# Information about the commits which are being pushed is supplied as lines to
+-# the standard input in the form:
+-#
+-#   <local ref> <local sha1> <remote ref> <remote sha1>
+-#
+-# This sample shows how to prevent push of commits where the log message starts
+-# with "WIP" (work in progress).
+-
+-remote="$1"
+-url="$2"
+-
+-z40=0000000000000000000000000000000000000000
+-
+-while read local_ref local_sha remote_ref remote_sha
+-do
+-	if [ "$local_sha" = $z40 ]
+-	then
+-		# Handle delete
+-		:
+-	else
+-		if [ "$remote_sha" = $z40 ]
+-		then
+-			# New branch, examine all commits
+-			range="$local_sha"
+-		else
+-			# Update to existing branch, examine new commits
+-			range="$remote_sha..$local_sha"
+-		fi
+-
+-		# Check for WIP commit
+-		commit=`git rev-list -n 1 --grep '^WIP' "$range"`
+-		if [ -n "$commit" ]
+-		then
+-			echo >&2 "Found WIP commit in $local_ref, not pushing"
+-			exit 1
+-		fi
+-	fi
+-done
+-
+-exit 0
+diff -ruN slf4j/.git/hooks/pre-rebase.sample real-slf4j-master/.git/hooks/pre-rebase.sample
+--- slf4j/.git/hooks/pre-rebase.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/pre-rebase.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,169 +0,0 @@
+-#!/bin/sh
+-#
+-# Copyright (c) 2006, 2008 Junio C Hamano
+-#
+-# The "pre-rebase" hook is run just before "git rebase" starts doing
+-# its job, and can prevent the command from running by exiting with
+-# non-zero status.
+-#
+-# The hook is called with the following parameters:
+-#
+-# $1 -- the upstream the series was forked from.
+-# $2 -- the branch being rebased (or empty when rebasing the current branch).
+-#
+-# This sample shows how to prevent topic branches that are already
+-# merged to 'next' branch from getting rebased, because allowing it
+-# would result in rebasing already published history.
+-
+-publish=next
+-basebranch="$1"
+-if test "$#" = 2
+-then
+-	topic="refs/heads/$2"
+-else
+-	topic=`git symbolic-ref HEAD` ||
+-	exit 0 ;# we do not interrupt rebasing detached HEAD
+-fi
+-
+-case "$topic" in
+-refs/heads/??/*)
+-	;;
+-*)
+-	exit 0 ;# we do not interrupt others.
+-	;;
+-esac
+-
+-# Now we are dealing with a topic branch being rebased
+-# on top of master.  Is it OK to rebase it?
+-
+-# Does the topic really exist?
+-git show-ref -q "$topic" || {
+-	echo >&2 "No such branch $topic"
+-	exit 1
+-}
+-
+-# Is topic fully merged to master?
+-not_in_master=`git rev-list --pretty=oneline ^master "$topic"`
+-if test -z "$not_in_master"
+-then
+-	echo >&2 "$topic is fully merged to master; better remove it."
+-	exit 1 ;# we could allow it, but there is no point.
+-fi
+-
+-# Is topic ever merged to next?  If so you should not be rebasing it.
+-only_next_1=`git rev-list ^master "^$topic" ${publish} | sort`
+-only_next_2=`git rev-list ^master           ${publish} | sort`
+-if test "$only_next_1" = "$only_next_2"
+-then
+-	not_in_topic=`git rev-list "^$topic" master`
+-	if test -z "$not_in_topic"
+-	then
+-		echo >&2 "$topic is already up to date with master"
+-		exit 1 ;# we could allow it, but there is no point.
+-	else
+-		exit 0
+-	fi
+-else
+-	not_in_next=`git rev-list --pretty=oneline ^${publish} "$topic"`
+-	/usr/bin/perl -e '
+-		my $topic = $ARGV[0];
+-		my $msg = "* $topic has commits already merged to public branch:\n";
+-		my (%not_in_next) = map {
+-			/^([0-9a-f]+) /;
+-			($1 => 1);
+-		} split(/\n/, $ARGV[1]);
+-		for my $elem (map {
+-				/^([0-9a-f]+) (.*)$/;
+-				[$1 => $2];
+-			} split(/\n/, $ARGV[2])) {
+-			if (!exists $not_in_next{$elem->[0]}) {
+-				if ($msg) {
+-					print STDERR $msg;
+-					undef $msg;
+-				}
+-				print STDERR " $elem->[1]\n";
+-			}
+-		}
+-	' "$topic" "$not_in_next" "$not_in_master"
+-	exit 1
+-fi
+-
+-<<\DOC_END
+-
+-This sample hook safeguards topic branches that have been
+-published from being rewound.
+-
+-The workflow assumed here is:
+-
+- * Once a topic branch forks from "master", "master" is never
+-   merged into it again (either directly or indirectly).
+-
+- * Once a topic branch is fully cooked and merged into "master",
+-   it is deleted.  If you need to build on top of it to correct
+-   earlier mistakes, a new topic branch is created by forking at
+-   the tip of the "master".  This is not strictly necessary, but
+-   it makes it easier to keep your history simple.
+-
+- * Whenever you need to test or publish your changes to topic
+-   branches, merge them into "next" branch.
+-
+-The script, being an example, hardcodes the publish branch name
+-to be "next", but it is trivial to make it configurable via
+-$GIT_DIR/config mechanism.
+-
+-With this workflow, you would want to know:
+-
+-(1) ... if a topic branch has ever been merged to "next".  Young
+-    topic branches can have stupid mistakes you would rather
+-    clean up before publishing, and things that have not been
+-    merged into other branches can be easily rebased without
+-    affecting other people.  But once it is published, you would
+-    not want to rewind it.
+-
+-(2) ... if a topic branch has been fully merged to "master".
+-    Then you can delete it.  More importantly, you should not
+-    build on top of it -- other people may already want to
+-    change things related to the topic as patches against your
+-    "master", so if you need further changes, it is better to
+-    fork the topic (perhaps with the same name) afresh from the
+-    tip of "master".
+-
+-Let's look at this example:
+-
+-		   o---o---o---o---o---o---o---o---o---o "next"
+-		  /       /           /           /
+-		 /   a---a---b A     /           /
+-		/   /               /           /
+-	       /   /   c---c---c---c B         /
+-	      /   /   /             \         /
+-	     /   /   /   b---b C     \       /
+-	    /   /   /   /             \     /
+-    ---o---o---o---o---o---o---o---o---o---o---o "master"
+-
+-
+-A, B and C are topic branches.
+-
+- * A has one fix since it was merged up to "next".
+-
+- * B has finished.  It has been fully merged up to "master" and "next",
+-   and is ready to be deleted.
+-
+- * C has not merged to "next" at all.
+-
+-We would want to allow C to be rebased, refuse A, and encourage
+-B to be deleted.
+-
+-To compute (1):
+-
+-	git rev-list ^master ^topic next
+-	git rev-list ^master        next
+-
+-	if these match, topic has not merged in next at all.
+-
+-To compute (2):
+-
+-	git rev-list master..topic
+-
+-	if this is empty, it is fully merged to "master".
+-
+-DOC_END
+diff -ruN slf4j/.git/hooks/pre-receive.sample real-slf4j-master/.git/hooks/pre-receive.sample
+--- slf4j/.git/hooks/pre-receive.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/pre-receive.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,24 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to make use of push options.
+-# The example simply echoes all push options that start with 'echoback='
+-# and rejects all pushes when the "reject" push option is used.
+-#
+-# To enable this hook, rename this file to "pre-receive".
+-
+-if test -n "$GIT_PUSH_OPTION_COUNT"
+-then
+-	i=0
+-	while test "$i" -lt "$GIT_PUSH_OPTION_COUNT"
+-	do
+-		eval "value=\$GIT_PUSH_OPTION_$i"
+-		case "$value" in
+-		echoback=*)
+-			echo "echo from the pre-receive-hook: ${value#*=}" >&2
+-			;;
+-		reject)
+-			exit 1
+-		esac
+-		i=$((i + 1))
+-	done
+-fi
+diff -ruN slf4j/.git/hooks/update.sample real-slf4j-master/.git/hooks/update.sample
+--- slf4j/.git/hooks/update.sample	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/hooks/update.sample	1969-12-31 21:00:00.000000000 -0300
+@@ -1,128 +0,0 @@
+-#!/bin/sh
+-#
+-# An example hook script to block unannotated tags from entering.
+-# Called by "git receive-pack" with arguments: refname sha1-old sha1-new
+-#
+-# To enable this hook, rename this file to "update".
+-#
+-# Config
+-# ------
+-# hooks.allowunannotated
+-#   This boolean sets whether unannotated tags will be allowed into the
+-#   repository.  By default they won't be.
+-# hooks.allowdeletetag
+-#   This boolean sets whether deleting tags will be allowed in the
+-#   repository.  By default they won't be.
+-# hooks.allowmodifytag
+-#   This boolean sets whether a tag may be modified after creation. By default
+-#   it won't be.
+-# hooks.allowdeletebranch
+-#   This boolean sets whether deleting branches will be allowed in the
+-#   repository.  By default they won't be.
+-# hooks.denycreatebranch
+-#   This boolean sets whether remotely creating branches will be denied
+-#   in the repository.  By default this is allowed.
+-#
+-
+-# --- Command line
+-refname="$1"
+-oldrev="$2"
+-newrev="$3"
+-
+-# --- Safety check
+-if [ -z "$GIT_DIR" ]; then
+-	echo "Don't run this script from the command line." >&2
+-	echo " (if you want, you could supply GIT_DIR then run" >&2
+-	echo "  $0 <ref> <oldrev> <newrev>)" >&2
+-	exit 1
+-fi
+-
+-if [ -z "$refname" -o -z "$oldrev" -o -z "$newrev" ]; then
+-	echo "usage: $0 <ref> <oldrev> <newrev>" >&2
+-	exit 1
+-fi
+-
+-# --- Config
+-allowunannotated=$(git config --bool hooks.allowunannotated)
+-allowdeletebranch=$(git config --bool hooks.allowdeletebranch)
+-denycreatebranch=$(git config --bool hooks.denycreatebranch)
+-allowdeletetag=$(git config --bool hooks.allowdeletetag)
+-allowmodifytag=$(git config --bool hooks.allowmodifytag)
+-
+-# check for no description
+-projectdesc=$(sed -e '1q' "$GIT_DIR/description")
+-case "$projectdesc" in
+-"Unnamed repository"* | "")
+-	echo "*** Project description file hasn't been set" >&2
+-	exit 1
+-	;;
+-esac
+-
+-# --- Check types
+-# if $newrev is 0000...0000, it's a commit to delete a ref.
+-zero="0000000000000000000000000000000000000000"
+-if [ "$newrev" = "$zero" ]; then
+-	newrev_type=delete
+-else
+-	newrev_type=$(git cat-file -t $newrev)
+-fi
+-
+-case "$refname","$newrev_type" in
+-	refs/tags/*,commit)
+-		# un-annotated tag
+-		short_refname=${refname##refs/tags/}
+-		if [ "$allowunannotated" != "true" ]; then
+-			echo "*** The un-annotated tag, $short_refname, is not allowed in this repository" >&2
+-			echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+-			exit 1
+-		fi
+-		;;
+-	refs/tags/*,delete)
+-		# delete tag
+-		if [ "$allowdeletetag" != "true" ]; then
+-			echo "*** Deleting a tag is not allowed in this repository" >&2
+-			exit 1
+-		fi
+-		;;
+-	refs/tags/*,tag)
+-		# annotated tag
+-		if [ "$allowmodifytag" != "true" ] && git rev-parse $refname > /dev/null 2>&1
+-		then
+-			echo "*** Tag '$refname' already exists." >&2
+-			echo "*** Modifying a tag is not allowed in this repository." >&2
+-			exit 1
+-		fi
+-		;;
+-	refs/heads/*,commit)
+-		# branch
+-		if [ "$oldrev" = "$zero" -a "$denycreatebranch" = "true" ]; then
+-			echo "*** Creating a branch is not allowed in this repository" >&2
+-			exit 1
+-		fi
+-		;;
+-	refs/heads/*,delete)
+-		# delete branch
+-		if [ "$allowdeletebranch" != "true" ]; then
+-			echo "*** Deleting a branch is not allowed in this repository" >&2
+-			exit 1
+-		fi
+-		;;
+-	refs/remotes/*,commit)
+-		# tracking branch
+-		;;
+-	refs/remotes/*,delete)
+-		# delete tracking branch
+-		if [ "$allowdeletebranch" != "true" ]; then
+-			echo "*** Deleting a tracking branch is not allowed in this repository" >&2
+-			exit 1
+-		fi
+-		;;
+-	*)
+-		# Anything else (is there anything else?)
+-		echo "*** Update hook: unknown type of update to ref $refname of type $newrev_type" >&2
+-		exit 1
+-		;;
+-esac
+-
+-# --- Finished
+-exit 0
+Os arquivos binários slf4j/.git/index e real-slf4j-master/.git/index são diferentes
+diff -ruN slf4j/.git/info/exclude real-slf4j-master/.git/info/exclude
+--- slf4j/.git/info/exclude	2026-02-21 12:50:49.811472793 -0300
++++ real-slf4j-master/.git/info/exclude	1969-12-31 21:00:00.000000000 -0300
+@@ -1,6 +0,0 @@
+-# git ls-files --others --exclude-from=.git/info/exclude
+-# Lines that start with '#' are comments.
+-# For a project mostly in C, the following would be a good set of
+-# exclude patterns (uncomment them if you want to use them):
+-# *.[oa]
+-# *~
+diff -ruN slf4j/.git/logs/HEAD real-slf4j-master/.git/logs/HEAD
+--- slf4j/.git/logs/HEAD	2026-02-21 12:51:06.232537203 -0300
++++ real-slf4j-master/.git/logs/HEAD	1969-12-31 21:00:00.000000000 -0300
+@@ -1 +0,0 @@
+-0000000000000000000000000000000000000000 d2073bece8310017914e1ff65d7107b2d4869c7d AnaBeatrizCM <ana.beatriz.marinho@ccc.ufcg.edu.br> 1771689066 -0300	clone: from https://github.com/qos-ch/slf4j.git
+diff -ruN slf4j/.git/logs/refs/heads/master real-slf4j-master/.git/logs/refs/heads/master
+--- slf4j/.git/logs/refs/heads/master	2026-02-21 12:51:06.232537203 -0300
++++ real-slf4j-master/.git/logs/refs/heads/master	1969-12-31 21:00:00.000000000 -0300
+@@ -1 +0,0 @@
+-0000000000000000000000000000000000000000 d2073bece8310017914e1ff65d7107b2d4869c7d AnaBeatrizCM <ana.beatriz.marinho@ccc.ufcg.edu.br> 1771689066 -0300	clone: from https://github.com/qos-ch/slf4j.git
+diff -ruN slf4j/.git/logs/refs/remotes/origin/HEAD real-slf4j-master/.git/logs/refs/remotes/origin/HEAD
+--- slf4j/.git/logs/refs/remotes/origin/HEAD	2026-02-21 12:51:06.232537203 -0300
++++ real-slf4j-master/.git/logs/refs/remotes/origin/HEAD	1969-12-31 21:00:00.000000000 -0300
+@@ -1 +0,0 @@
+-0000000000000000000000000000000000000000 d2073bece8310017914e1ff65d7107b2d4869c7d AnaBeatrizCM <ana.beatriz.marinho@ccc.ufcg.edu.br> 1771689066 -0300	clone: from https://github.com/qos-ch/slf4j.git
+Os arquivos binários slf4j/.git/objects/pack/pack-f2f2d9a5b6f257ec389813737e8d6a516bd0214e.idx e real-slf4j-master/.git/objects/pack/pack-f2f2d9a5b6f257ec389813737e8d6a516bd0214e.idx são diferentes
+Os arquivos binários slf4j/.git/objects/pack/pack-f2f2d9a5b6f257ec389813737e8d6a516bd0214e.pack e real-slf4j-master/.git/objects/pack/pack-f2f2d9a5b6f257ec389813737e8d6a516bd0214e.pack são diferentes
+diff -ruN slf4j/.git/packed-refs real-slf4j-master/.git/packed-refs
+--- slf4j/.git/packed-refs	2026-02-21 12:51:06.232537203 -0300
++++ real-slf4j-master/.git/packed-refs	1969-12-31 21:00:00.000000000 -0300
+@@ -1,219 +0,0 @@
+-# pack-refs with: peeled fully-peeled sorted 
+-5be7db79015645fc6af978bc2c025414b4689db2 refs/remotes/origin/1.7-maintenance
+-3c4b29b061f1bccd0cc70436096592706ca76edb refs/remotes/origin/2.0
+-4230a079d8c076c95af742ba60fe9430a31cd317 refs/remotes/origin/atomic_initialization_state
+-bf07e59408ba1f69b2800afe0d9dffce93046d44 refs/remotes/origin/bom
+-0bf9797444de139340a9a8f69ff820a841e80778 refs/remotes/origin/branch_2.1.x
+-7be32abc9f7b0eeaa47017c8b7c6800c140222e5 refs/remotes/origin/bug70
+-d2e89fa99d8b725c5710a67b712ea89089a41ba8 refs/remotes/origin/event
+-d2073bece8310017914e1ff65d7107b2d4869c7d refs/remotes/origin/master
+-32688610abb07ddde4e95b59b16aa27430d5a8ed refs/remotes/origin/nordligulv-master
+-1a1f482c2a9998bb9bd64d8350637b175078d6df refs/remotes/origin/slf4j-243-bridgeActivator
+-3e749c3d6f5a4d74e31f49bd50956f3dbe3add76 refs/remotes/origin/slf4j-341
+-9bea50f144d7d4948ffaa3c596ec4f9a74a478c7 refs/remotes/origin/slf4j-344-logServiceReader
+-1cd601df7b984da08d7269f91302d49f915377bc refs/remotes/origin/weiglewilczek-master
+-91b10e902132195937a663c3dd883cb5f3985d8c refs/tags/SLF4J_1.0RC4
+-^26292f91bcb674b9d3a866b889f431268ada1217
+-66dffa5bc8f07b8a2defc63afd1199471d9e5363 refs/tags/SLF4J_1.3.0
+-^a8f066010596dcbef1291b14353ca5e3fc190bd7
+-30521f946a39cfaefcbc426f47bdc39b7314d2da refs/tags/SLF4J_1.3.1
+-^260b5f6f9d0f149274a803a01dd28351590ef15e
+-e2256838cbb113ec06a12b0f5aaf2a72cc28982e refs/tags/SLF4J_1.4.0
+-^d8eadb09a11dbdfc8e35042178582e48b50c2405
+-2b0a7c96602334a5cb24ba5918829415c917418d refs/tags/SLF4J_1.4.1
+-^7011d1f3665e88c314029486222ea241398fcd71
+-57b7c6372923b457fdc6da6f7aae9ae9b670ab91 refs/tags/SLF4J_1.4.2
+-^5fd428e3dd03ed4c1cd7b436fb0531a4315a5108
+-9ccedb4bf273d352e853550b0491be7b218f8657 refs/tags/SLF4J_1.4.3
+-^04a8c2c2cf42307e655ce14872c6bcecefc3babc
+-b7f3e4c13766b6aa13b2662a1fe928e1928819e7 refs/tags/SLF4J_1.5.0
+-^ee8c513c6886c95e799f7403ef206ea91eb3099d
+-b7209ad53a7381b690805cd8ff8065c134314046 refs/tags/SLF4J_1.5.1
+-^40c5b11a0f2092ec24f729326447a7db55471df8
+-c54eaad264b17da2b2883dae39bbc154f343136d refs/tags/SLF4J_1.5.2
+-^197f49ee9b6a44c8cce36bbac315089f6e1d10c4
+-40ccd0af8187241040a65a192932e2b10031880d refs/tags/SLF4J_1.5.3
+-^d16bb13a16b1bdf67c04144900caa6fd9e7fc6d0
+-5b06e038061034be8690300976fa775297c7ae39 refs/tags/SLF4J_1.5.4
+-^97897bfee1be0534669223b2bb8c5d37b927971a
+-b61a672cedc957ba74a0f251202f395025348e62 refs/tags/SLF4J_1.5.5
+-^6294c5d678b77b91b60ecc727ad43c263c658be6
+-233e3cae7f72d27620ee1e488ffe251a8125b654 refs/tags/SLF4J_1.5.6
+-^93a2eaa03de453f7039ecbc6f415cbddcc1c5cd1
+-ed5dc4c4ac1ddab32d9b79303a601d24d38d2bfa refs/tags/SLF4J_1.5.7_FINAL
+-^1f162bac5673555875d57e9373ab48785882bf0f
+-78c965b3a9fdd6ca547aed51fae8a03e5cd147e3 refs/tags/SLF4J_1.5.8
+-^dda38e5fba4f6c2a12df868b23df3525f45f0bf1
+-eba2e24a8e387121237a4bcbefb79cb809ff74c8 refs/tags/jigsawOne
+-^20570d8ebacca9978afbdbd936cc88db19d10b9a
+-70d3d276cb14f4792714c99d9660f1e69b4c3a93 refs/tags/v1.5.10
+-68ec1d0ef14db1282be61c410d4b1a11d04da426 refs/tags/v1.5.11
+-^00fe6c619057d7791180edc6c38d9151ed6f3d28
+-b1fee76b387d8d76649b73238ecc28f70096e9f6 refs/tags/v1.5.9-RC0
+-^aec79d97acacb680a1a611aa134c50dd6a3014af
+-f9313e23a501190219702233f34442dffdbdec7e refs/tags/v1.5.9.RC1
+-^58e6b11530ab61312326b4d5f4bf43900797d650
+-0c925d6c3997d27862d75bbc4416e53004aafee9 refs/tags/v1.6.0-RC0
+-^4e9748b4696e1ca6c80ce6be7fe2096e9639ba04
+-0a4ab11b2ef0630467ec2ba6461ae32d720deaa0 refs/tags/v1.7.7
+-^46cf4f7fedf92ebe69efb28d7032086094b47403
+-037309b68e9d1465b1562b7e7a7c6c1c8e11838e refs/tags/v2.0.14
+-^03aa6b915a82a037d2936ca0b166626d32e9a1f6
+-4b093d88865bb4bc18804c6bb845d8247a55e879 refs/tags/v_1.6.0
+-^b1d03d5ce82626fbc2e4b5ad13f8e92128b18038
+-fc8b0af53079f4511da0897887b622022dccc3be refs/tags/v_1.6.0-alpha2
+-^cea955f6bb87430c1d213e10bdb65d73752e8c9d
+-96b7f5b90f493feb1891f60cc0fe62aad0b00a39 refs/tags/v_1.6.1
+-^990f24180a7fe18040a851a71f6fab06a4f18604
+-9dc53c30053acb8f42af99ee90752621614cc73e refs/tags/v_1.6.2
+-^1bb6ebb8f5b63569920101f79132f525437aa964
+-71228e61dc0e0ba4d792ad17de73a27c6cce2faa refs/tags/v_1.6.3
+-^20ef8743669eaba701967f735039033348b27efb
+-7eea4f1d8ad317d57001eaf6aa4f47f4538e1342 refs/tags/v_1.6.4
+-^38915dafe04496b42ec65732c9376aa26b3c81e9
+-4bf4f352ccb6ef0d57c5005f31cfd55c75acdffb refs/tags/v_1.6.5
+-^b48ade9995a90fbd406b322080b99b10b303c320
+-4a5ebb155ca70cbd6f7d47eadabad73437ea9b54 refs/tags/v_1.6.6
+-^fbe2e679da6a59188a5c10696682a5e801b887cb
+-7ae3a78546e87b66dc65290dd56f466016852f5d refs/tags/v_1.7.0
+-^999956dd00ae500d998d2b17cea33e8b83617127
+-dc858e1fef7dc2ba4513b93898f2d218b22d15d4 refs/tags/v_1.7.1
+-^88333f50effb1bb618847b0901b2a1e43e86d9c8
+-989d667064516e8d8aee3cbf0c9a5de697ae3cfd refs/tags/v_1.7.10
+-^d4c2cf5bd32b85a4172071e2b23d66800ab8aebd
+-18c7b15031baf5afd48d30a5c1fc330e3f391f56 refs/tags/v_1.7.11
+-^850c565e3a418833cd704c86174b8d6efa511b43
+-f46eac97c5a6190e6d866b9d7a25564f9bcba5f0 refs/tags/v_1.7.12
+-^0c189f9882f3167e2dadd9f2eeb115caa2ad9629
+-2211b8b8526f2058a8ac353ed8e0dffaf8b93d62 refs/tags/v_1.7.13
+-^fc84778ffe721edafe6863ceb5407133fc2c285c
+-b77f42e539838aaa4c70410e9d3e640bae9a5991 refs/tags/v_1.7.14
+-^6b7721b507e0d609d20cb4dfc7e7084b95cc231d
+-7dd54d5313cb63436e2fb188b3aa9e29e5880085 refs/tags/v_1.7.15
+-^31c509e9a6fdc6902b531b62ec556e3fa757228e
+-457dd9fd503fd3ec771fbca589ebcaa0f9e70d4f refs/tags/v_1.7.16
+-^cdc7773e8e02d4cc34c3dc3461831bc280c5dbb9
+-c51a16f434ac24c61295c8c8c6f9bb38798940aa refs/tags/v_1.7.17
+-^b732747165d93215358019e36d5598b4fb25d7c8
+-91614394eb37b67d98ebe24a1de81f30041045e6 refs/tags/v_1.7.18
+-^c25881c13e4905a14817ce13a2a9a3819183f791
+-6025848d9fed6263a72757dc77e4e96afd0c7fda refs/tags/v_1.7.19
+-^227f986525ce611069e7bf7f8cc300149002b9b2
+-c962b775a645276e7701a5a137c49bf5ac9c993d refs/tags/v_1.7.2
+-^c06e41788dcd9ce06602d2709ce34261adff4ce9
+-67afc19b78dd06f8258fb260a5f5739346f7e04c refs/tags/v_1.7.20
+-^0aa7c8c8c38e25405d3241235646a9cedeb80eb8
+-66eba0aea7e96754dc7ed3149f8652741922782f refs/tags/v_1.7.21
+-^25aba2ea4febeb35ba910c249826b5a62001a7e4
+-f0c6280fc98c0e1f42a6dbc1fa7219ece4390100 refs/tags/v_1.7.22
+-^3ec4456cd318a3091f2659e1dfcbbe813e6b9642
+-db02d9650fb766e5528e4903384bea7de1ea3022 refs/tags/v_1.7.23
+-^5c822203c9c334d8e4e5451e716f38c2fd4202c5
+-f72cfacd4702f114d6c9dd35cfe6dae78e795de7 refs/tags/v_1.7.24
+-^e49d591fc6f3e4f1517edb7ac56f2ca62b4660ce
+-f3db30e3f9e348f889f100448aa3dd699a3014f8 refs/tags/v_1.7.25
+-^a81440ea36676f3b090f5a4ccba70d17c7b80f6e
+-68d28a0e06f09581a1945d51acf3d3b827b17500 refs/tags/v_1.7.26
+-^7a35058597b49f220b751ad56ac0b45e570c2205
+-6a67b42c6b42d0ea866799bed61a38240a4f41d2 refs/tags/v_1.7.27
+-^4c6c574a7a742d07aee788ade66f2f9b8f0c6c34
+-02d2c32dbdb7c2804550c8c72f7409acf4375187 refs/tags/v_1.7.28
+-^b44fbd53cc8bc87f40e5412e60495b19bbf07bb0
+-df1b0de225634832b62480308edf35b59a30dbf2 refs/tags/v_1.7.29
+-^ca93154c79d7489ccc36a6957ebc2e74c34181ba
+-d199832175184c6d3cac329496d8a8c5adde14a5 refs/tags/v_1.7.3
+-^1c3e4c628ade20945818e320cd0e4f05a5e4ce77
+-c7a01c37e72c7001b90a6593e26a1b13b8b5f8f1 refs/tags/v_1.7.30
+-^0b97c416e42a184ff9728877b461c616187c58f7
+-06c5e8802a70586fe89dee39a519332a0f76ee77 refs/tags/v_1.7.31
+-^502c5286e9a98ec97beb16418f782867084eff20
+-47baf0439bca315dcbbb04c1546402bed82dac77 refs/tags/v_1.7.32
+-^0d8774854f4ebb0807bcb69867c13f1e991fcde5
+-3ab9de8564a793b6508d0957cecd52f923094f17 refs/tags/v_1.7.33
+-^2758a974264ab65df3af1d473eb9423ca978c14a
+-9889bcec0afd9c4a8ac4fd54568ec2ef8e36b3ed refs/tags/v_1.7.34
+-^a622f5186a57188dab7f71651245eb91c6ac263b
+-e6f0a66a2e5b79e4f19f85c55723812161d1c368 refs/tags/v_1.7.35
+-^02860b67ef7ff39fa9c7d98fd00da2ee913faeda
+-e4b93526e5f005e9ab7750c993520ab2b680166c refs/tags/v_1.7.36
+-^e9ee55cca93c2bf26f14482a9bdf961c750d2a56
+-22959133a9df47f01cf98d5557de94ddad7d0e3b refs/tags/v_1.7.4
+-^a031ea22e9812026236336662e4e124bcacd8144
+-8ab98cf242147cbcafe654c47d5b68c1fb4ae639 refs/tags/v_1.7.5
+-^916dcc44e8b490b4ded137455b6b050fd39a2ee5
+-7d3073b316d71ac67d23fd6100fff37cd302ba9b refs/tags/v_1.7.6
+-^1784b3485cdc77ccd7b0ed318223dedb9bdf6dfd
+-2ecb0fc0084bbab626be50af0b65145ba96214e0 refs/tags/v_1.7.8
+-^8a1702ba0f1ccd5dec8b4fca59829399313edeac
+-714308526fea5124cdfc53c476769411661db2a4 refs/tags/v_1.7.9
+-^e4b7f60e244b0261f2d89b0b7bcb08091c745c85
+-8600a8c2aeb951c6bcbdf5882d1ef5f68d359ede refs/tags/v_1.8.0-alpha1
+-^ae16a03219821ec78e8dd456cb3e0c20e5adcda8
+-82b4163d2f3754c57ea002f54c68c88d4303fdd6 refs/tags/v_1.8.0-alpha2
+-^70ec42263abf188950cd2a8f8eb4502c9c372ac1
+-7f86846c6f254b1bf0a1f3ef30429a202fe5fa10 refs/tags/v_1.8.0-beta1
+-^287004f70bc1b238b41e69f2aa5d1db18a2b6a00
+-73adb5d5d338457c03ba8edd8933b3efdff9bc66 refs/tags/v_1.8.0-beta3
+-^5e93462dd781677fb75aefc6cc7df65822970ca0
+-3199c29ae5400f9730878319865c868dac6942de refs/tags/v_1.8.0-beta4
+-^c7e0311517153d72e6edcf0ab52be7fb42ea36a7
+-624ada1272c896d06969bd78a5ca356554768ff4 refs/tags/v_1.8.0_beta2
+-^26731d281940483d8777a8a7a4146329a28496aa
+-57e82056a80aea1d76f776c90b28eead1950ec24 refs/tags/v_2.0.0
+-^0614d467d7bca81724f45e228f4f871161222b51
+-f3d86167a3df67a7cd1ef11cadf59b32db559669 refs/tags/v_2.0.0-alpha1
+-^0c1d72b602da6599e1637c92e9ecb3292afdc3b7
+-f11eaa85daf2bb832eba5225d140167df19ce8b9 refs/tags/v_2.0.0-alpha3
+-^8eea071d3e090587c58ffe62444b4bf2fa9acdf9
+-e2383c9c502094cb870c31724a83260715e7d101 refs/tags/v_2.0.0-alpha4
+-^7836be3be57840bf76b8e9bf44f592a48674c631
+-1f6ff0eee7cf0e9a0e18bf061cf3b0ccfbbe80e4 refs/tags/v_2.0.0-alpha5
+-^0a34a87495b39f0d70204ee0d07129e9c22dfb98
+-0a1032ca22e14fbe3248df0da906ca8ef0a858c1 refs/tags/v_2.0.0-alpha6
+-^66e9c2555fc0b0cac18ac5820cc438429515ac2c
+-ae6eaee606a046fb56e20d200e125bd8734a49a9 refs/tags/v_2.0.0-alpha7
+-^5fcbb283a323e2c5be9653b399475b6f582907ee
+-c8e7cdc410fb5bf87f18d40fe43f4bd16df64428 refs/tags/v_2.0.0-beta0
+-^2314de9dd9f9abbef360f5c6240487c0ac7e5fc3
+-2ab0797ae386c438efdf42bd1e81e08a08cfe927 refs/tags/v_2.0.0-beta1
+-^aeebb6199d412a3883af2d0c414a69fde26b5971
+-1e608fbf3f53f4172a2521f63d53270a16573df2 refs/tags/v_2.0.0_alpha2
+-^3f4d3d91f3096de658d6ce4390b35e9b177569ba
+-ad1f434f2e9e4165092fc60ea1edf1b4c50f296c refs/tags/v_2.0.1
+-^9752442b6e6db0749915dc40e80437dc97cd772d
+-1fef8cddcfc524a5f953347afc971827f054b3ab refs/tags/v_2.0.10
+-^6fe9c07113feee42d88c8478fc7c404b977fe62e
+-aaf41cbc53de77defb076cb8fd3f67a29382f219 refs/tags/v_2.0.11
+-^d9145fba56fc213646d38a3230f60f76aba10bbf
+-8527d6ed4303b35b6b30f3d87577ecb8decacb88 refs/tags/v_2.0.12
+-^955209464d517cd91186f6407a60feb202dc26b8
+-f624bef86072243be350543f0a15704b4c7f4bbc refs/tags/v_2.0.13
+-^5ffbc67def52bbb1c9b954676d25f436746d174e
+-f208b99ae73022fe07415190f9d6799d212fd5e7 refs/tags/v_2.0.14
+-^03aa6b915a82a037d2936ca0b166626d32e9a1f6
+-890b98c7bfd37c4afbfc874dde71a2eb3fce5b5c refs/tags/v_2.0.15
+-^5321a975d46e47a651fb93642a2a77bb1e2cef82
+-a4c3ff99cd3b9f52b237b954ac45be467f549dfe refs/tags/v_2.0.16
+-^101086ba359a6a80f275ad090f57d74a34eee8ca
+-95a453066fceca0476209ad622b118f72ad7e2f1 refs/tags/v_2.0.17
+-^c233ea1932228a7fc580823289f896e97ba8a74d
+-3e0c4cef776c5a3a6b9213d3be9cc0391889fd53 refs/tags/v_2.0.2
+-^0645c18cafbad8dfcebf2d57926cba496c8ab055
+-0dfe469a743f9ee167afb323b80a93db2f15749d refs/tags/v_2.0.3
+-^b2cb05f16acc21a3266a74ef5c578f2cd9efdead
+-00ff5d4ed4a9992032478d300ed6816be3da7093 refs/tags/v_2.0.4
+-^35dd7ff1e75cf83ffb6784a9537ff92c865e78b2
+-ebce9e2c12e8c839ee6f6f1984007e01da28accf refs/tags/v_2.0.5
+-^7e62e1e6917e19e6eeb8faf97daa9e2469bc946d
+-834e6a84de86ffd864215812983bfeaa74c0dc98 refs/tags/v_2.0.6
+-^5ff6f2c385c36ea4f8b85cacd69f7ca891c37818
+-4ea333c34a4a0cc5605c3ca469a62ec3dfb193aa refs/tags/v_2.0.7
+-^d6a21ae68f8a996bc24526f82ec46907e6688bc0
+-0684157f6fba0717e6c113eee99fa1c6c3049446 refs/tags/v_2.0.8
+-^10a151756d4ab7c79a95e5a74a3ed33fd7cf82a0
+-88b9a28735125cd2b82c61fd9d221a2757b8388b refs/tags/v_2.0.9
+-^216459e5d81c3b066748c51a4eabcda32395fe05
+-94d750ad39187e5a2cafd44a9d771c6c1bbee053 refs/tags/v_2.1.0-alpha0
+-^037b7258c5c665169188fe5f77d3cfbe4d9658b3
+-cf6cae07f060269bc552f0f61f9fae493da0961d refs/tags/v_2.1.0-alpha1
+-^d0fe6310eb4f1e9cb306b6934a3e7aee0feef46b
+diff -ruN slf4j/.git/refs/heads/master real-slf4j-master/.git/refs/heads/master
+--- slf4j/.git/refs/heads/master	2026-02-21 12:51:06.232537203 -0300
++++ real-slf4j-master/.git/refs/heads/master	1969-12-31 21:00:00.000000000 -0300
+@@ -1 +0,0 @@
+-d2073bece8310017914e1ff65d7107b2d4869c7d
+diff -ruN slf4j/.git/refs/remotes/origin/HEAD real-slf4j-master/.git/refs/remotes/origin/HEAD
+--- slf4j/.git/refs/remotes/origin/HEAD	2026-02-21 12:51:06.232537203 -0300
++++ real-slf4j-master/.git/refs/remotes/origin/HEAD	1969-12-31 21:00:00.000000000 -0300
+@@ -1 +0,0 @@
+-ref: refs/remotes/origin/master
+diff -ruN slf4j/.idea/codeStyleSettings.xml real-slf4j-master/.idea/codeStyleSettings.xml
+--- slf4j/.idea/codeStyleSettings.xml	2026-02-21 12:51:06.248538231 -0300
++++ real-slf4j-master/.idea/codeStyleSettings.xml	1969-12-31 21:00:00.000000000 -0300
+@@ -1,48 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<project version="4">
+-  <component name="ProjectCodeStyleSettingsManager">
+-    <option name="PER_PROJECT_SETTINGS">
+-      <value>
+-        <option name="OTHER_INDENT_OPTIONS">
+-          <value>
+-            <option name="INDENT_SIZE" value="2" />
+-            <option name="CONTINUATION_INDENT_SIZE" value="8" />
+-            <option name="TAB_SIZE" value="2" />
+-            <option name="USE_TAB_CHARACTER" value="false" />
+-            <option name="SMART_TABS" value="false" />
+-            <option name="LABEL_INDENT_SIZE" value="0" />
+-            <option name="LABEL_INDENT_ABSOLUTE" value="false" />
+-            <option name="USE_RELATIVE_INDENTS" value="false" />
+-          </value>
+-        </option>
+-        <XML>
+-          <option name="XML_LEGACY_SETTINGS_IMPORTED" value="true" />
+-        </XML>
+-        <codeStyleSettings language="JAVA">
+-          <option name="RIGHT_MARGIN" value="120" />
+-          <option name="ALIGN_MULTILINE_PARAMETERS_IN_CALLS" value="true" />
+-          <option name="SPACE_BEFORE_IF_PARENTHESES" value="false" />
+-          <option name="SPACE_BEFORE_WHILE_PARENTHESES" value="false" />
+-          <option name="SPACE_BEFORE_FOR_PARENTHESES" value="false" />
+-          <option name="SPACE_BEFORE_TRY_PARENTHESES" value="false" />
+-          <option name="SPACE_BEFORE_SWITCH_PARENTHESES" value="false" />
+-          <option name="SPACE_BEFORE_SYNCHRONIZED_PARENTHESES" value="false" />
+-          <option name="KEEP_SIMPLE_METHODS_IN_ONE_LINE" value="true" />
+-          <option name="KEEP_SIMPLE_CLASSES_IN_ONE_LINE" value="true" />
+-          <option name="KEEP_MULTIPLE_EXPRESSIONS_IN_ONE_LINE" value="true" />
+-          <indentOptions>
+-            <option name="INDENT_SIZE" value="4" />
+-            <option name="TAB_SIZE" value="4" />
+-          </indentOptions>
+-        </codeStyleSettings>
+-        <codeStyleSettings language="XML">
+-          <indentOptions>
+-            <option name="INDENT_SIZE" value="2" />
+-            <option name="TAB_SIZE" value="2" />
+-          </indentOptions>
+-        </codeStyleSettings>
+-      </value>
+-    </option>
+-    <option name="USE_PER_PROJECT_SETTINGS" value="true" />
+-  </component>
+-</project>
+\ Nenhum caractere de nova linha no final do arquivo
+diff -ruN slf4j/slf4j-api/src/main/java/org/slf4j/event/SubstituteLoggingEvent.java real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/SubstituteLoggingEvent.java
+--- slf4j/slf4j-api/src/main/java/org/slf4j/event/SubstituteLoggingEvent.java	2026-02-21 12:51:06.260539000 -0300
++++ real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/SubstituteLoggingEvent.java	2026-02-21 11:39:51.865385038 -0300
+@@ -112,4 +112,4 @@
+     public List<KeyValuePair> getKeyValuePairs() {
+         return keyValuePairList;
+     }
+-}
++}
+\ Nenhum caractere de nova linha no final do arquivo
+diff -ruN slf4j/slf4j-api/src/main/java/org/slf4j/MDC.java real-slf4j-master/slf4j-api/src/main/java/org/slf4j/MDC.java
+--- slf4j/slf4j-api/src/main/java/org/slf4j/MDC.java	2026-02-21 12:51:06.260539000 -0300
++++ real-slf4j-master/slf4j-api/src/main/java/org/slf4j/MDC.java	2026-02-21 11:39:51.865385038 -0300
+@@ -63,7 +63,7 @@
+ public class MDC {
+ 
+     static final String NULL_MDCA_URL = "http://www.slf4j.org/codes.html#null_MDCA";
+-    private static final String MDC_ADAPTER_CANNOT_BE_NULL_MESSAGE = "MDCAdapter cannot be null. See also " + NULL_MDCA_URL;
++    private static final String MDC_APAPTER_CANNOT_BE_NULL_MESSAGE = "MDCAdapter cannot be null. See also " + NULL_MDCA_URL;
+     static final String NO_STATIC_MDC_BINDER_URL = "http://www.slf4j.org/codes.html#no_static_mdc_binder";
+     static MDCAdapter MDC_ADAPTER;
+ 
+@@ -132,7 +132,7 @@
+             throw new IllegalArgumentException("key parameter cannot be null");
+         }
+         if (getMDCAdapter() == null) {
+-            throw new IllegalStateException(MDC_ADAPTER_CANNOT_BE_NULL_MESSAGE);
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
+         }
+         getMDCAdapter().put(key, val);
+     }
+@@ -187,7 +187,9 @@
+             throw new IllegalArgumentException("key parameter cannot be null");
+         }
+ 
+-        mdcAdapterNullCheck();
++        if (getMDCAdapter() == null) {
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
++        }
+         return getMDCAdapter().get(key);
+     }
+ 
+@@ -206,7 +208,9 @@
+             throw new IllegalArgumentException("key parameter cannot be null");
+         }
+ 
+-        mdcAdapterNullCheck();
++        if (getMDCAdapter() == null) {
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
++        }
+         getMDCAdapter().remove(key);
+     }
+ 
+@@ -214,7 +218,9 @@
+      * Clear all entries in the MDC of the underlying implementation.
+      */
+     public static void clear() {
+-        mdcAdapterNullCheck();
++        if (getMDCAdapter() == null) {
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
++        }
+         getMDCAdapter().clear();
+     }
+ 
+@@ -226,7 +232,9 @@
+      * @since 1.5.1
+      */
+     public static Map<String, String> getCopyOfContextMap() {
+-        mdcAdapterNullCheck();
++        if (getMDCAdapter() == null) {
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
++        }
+         return getMDCAdapter().getCopyOfContextMap();
+     }
+ 
+@@ -242,7 +250,9 @@
+      * @since 1.5.1
+      */
+     public static void setContextMap(Map<String, String> contextMap) {
+-        mdcAdapterNullCheck();
++        if (getMDCAdapter() == null) {
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
++        }
+         getMDCAdapter().setContextMap(contextMap);
+     }
+ 
+@@ -270,7 +280,7 @@
+      */
+     static void setMDCAdapter(MDCAdapter anMDCAdapter) {
+         if(anMDCAdapter == null) {
+-            throw new IllegalStateException(MDC_ADAPTER_CANNOT_BE_NULL_MESSAGE);
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
+         }
+         MDC_ADAPTER = anMDCAdapter;
+     }
+@@ -283,24 +293,28 @@
+      * @since 2.0.0
+      */
+     static public void pushByKey(String key, String value) {
+-        mdcAdapterNullCheck();
++        if (getMDCAdapter() == null) {
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
++        }
+         getMDCAdapter().pushByKey(key, value);
+     }
+     
+     /**
+-     * Pop the <b>stack</b> referenced by 'key' and return the value possibly null.
++     * Pop the stack referenced by 'key' and return the value possibly null.
+      * 
+      * @param key identifies the deque(stack)
+      * @return the value just popped. May be null/
+      * @since 2.0.0
+      */
+     static public String popByKey(String key) {
+-        mdcAdapterNullCheck();
++        if (getMDCAdapter() == null) {
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
++        }
+         return getMDCAdapter().popByKey(key);
+     }
+ 
+     /**
+-     * Returns a copy of the <b>deque(stack)</b> referenced by 'key'. May be null.
++     * Returns a copy of the deque(stack) referenced by 'key'. May be null.
+      * 
+      * @param key identifies the  stack
+      * @return copy of stack referenced by 'key'. May be null.
+@@ -308,13 +322,9 @@
+      * @since 2.0.0
+      */
+     public Deque<String>  getCopyOfDequeByKey(String key) {
+-        mdcAdapterNullCheck();
+-        return getMDCAdapter().getCopyOfDequeByKey(key);
+-    }
+-
+-    private static void mdcAdapterNullCheck() {
+         if (getMDCAdapter() == null) {
+-            throw new IllegalStateException(MDC_ADAPTER_CANNOT_BE_NULL_MESSAGE);
++            throw new IllegalStateException(MDC_APAPTER_CANNOT_BE_NULL_MESSAGE);
+         }
++        return getMDCAdapter().getCopyOfDequeByKey(key);
+     }
+ }
+diff -ruN slf4j/slf4j-api/src/main/java/org/slf4j/spi/MDCAdapter.java real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/MDCAdapter.java
+--- slf4j/slf4j-api/src/main/java/org/slf4j/spi/MDCAdapter.java	2026-02-21 12:51:06.264539258 -0300
++++ real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/MDCAdapter.java	2026-02-21 11:39:51.865385038 -0300
+@@ -93,7 +93,7 @@
+     public void setContextMap(Map<String, String> contextMap);
+     
+     /**
+-     * Push a value into the <b>deque(stack)</b> referenced by 'key'.
++     * Push a value into the deque(stack) referenced by 'key'.
+      *      
+      * @param key identifies the appropriate stack
+      * @param value the value to push into the stack
+@@ -102,7 +102,7 @@
+     public void pushByKey(String key, String value);
+     
+     /**
+-     * Pop the <b>stack</b> referenced by 'key' and return the value possibly null.
++     * Pop the stack referenced by 'key' and return the value possibly null.
+      * 
+      * @param key identifies the deque(stack)
+      * @return the value just popped. May be null/
+@@ -111,7 +111,7 @@
+     public String popByKey(String key);
+ 
+     /**
+-     * Returns a copy of the <b>deque(stack)</b> referenced by 'key'. May be null.
++     * Returns a copy of the deque(stack) referenced by 'key'. May be null.
+      * 
+      * @param key identifies the  stack
+      * @return copy of stack referenced by 'key'. May be null.
+@@ -122,7 +122,7 @@
+     
+ 
+     /**
+-     * Clear the <b>deque(stack)</b> referenced by 'key'.
++     * Clear the deque(stack) referenced by 'key'. 
+      * 
+      * @param key identifies the  stack
+      * 
+diff -ruN slf4j/slf4j-api/target/classes/META-INF/LICENSE.txt real-slf4j-master/slf4j-api/target/classes/META-INF/LICENSE.txt
+--- slf4j/slf4j-api/target/classes/META-INF/LICENSE.txt	1969-12-31 21:00:00.000000000 -0300
++++ real-slf4j-master/slf4j-api/target/classes/META-INF/LICENSE.txt	2026-02-21 12:27:17.620009830 -0300
+@@ -0,0 +1,24 @@
++Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)
++All rights reserved.
++
++Permission is hereby granted, free  of charge, to any person obtaining
++a  copy  of this  software  and  associated  documentation files  (the
++"Software"), to  deal in  the Software without  restriction, including
++without limitation  the rights to  use, copy, modify,  merge, publish,
++distribute,  sublicense, and/or sell  copies of  the Software,  and to
++permit persons to whom the Software  is furnished to do so, subject to
++the following conditions:
++
++The  above  copyright  notice  and  this permission  notice  shall  be
++included in all copies or substantial portions of the Software.
++
++THE  SOFTWARE IS  PROVIDED  "AS  IS", WITHOUT  WARRANTY  OF ANY  KIND,
++EXPRESS OR  IMPLIED, INCLUDING  BUT NOT LIMITED  TO THE  WARRANTIES OF
++MERCHANTABILITY,    FITNESS    FOR    A   PARTICULAR    PURPOSE    AND
++NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
++LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
++OF CONTRACT, TORT OR OTHERWISE,  ARISING FROM, OUT OF OR IN CONNECTION
++WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
++
++
++
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/event/DefaultLoggingEvent.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/event/DefaultLoggingEvent.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/event/EventConstants.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/event/EventConstants.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/event/EventRecordingLogger.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/event/EventRecordingLogger.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/event/KeyValuePair.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/event/KeyValuePair.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/event/Level.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/event/Level.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/event/LoggingEvent.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/event/LoggingEvent.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/event/SubstituteLoggingEvent.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/event/SubstituteLoggingEvent.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/AbstractLogger.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/AbstractLogger.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/BasicMarker.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/BasicMarker.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/BasicMarkerFactory.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/BasicMarkerFactory.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/BasicMDCAdapter$1.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/BasicMDCAdapter$1.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/BasicMDCAdapter.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/BasicMDCAdapter.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/CheckReturnValue.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/CheckReturnValue.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/FormattingTuple.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/FormattingTuple.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/LegacyAbstractLogger.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/LegacyAbstractLogger.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/MarkerIgnoringBase.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/MarkerIgnoringBase.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/MessageFormatter.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/MessageFormatter.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/NamedLoggerBase.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/NamedLoggerBase.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/NOP_FallbackServiceProvider.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/NOP_FallbackServiceProvider.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/NOPLogger.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/NOPLogger.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/NOPLoggerFactory.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/NOPLoggerFactory.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/NOPMDCAdapter.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/NOPMDCAdapter.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/NormalizedParameters.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/NormalizedParameters.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/Reporter$Level.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/Reporter$Level.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/Reporter$TargetChoice.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/Reporter$TargetChoice.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/Reporter.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/Reporter.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/Slf4jEnvUtil.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/Slf4jEnvUtil.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/SubstituteLogger.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/SubstituteLogger.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/SubstituteLoggerFactory.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/SubstituteLoggerFactory.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/SubstituteServiceProvider.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/SubstituteServiceProvider.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/ThreadLocalMapOfStacks.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/ThreadLocalMapOfStacks.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/Util$1.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/Util$1.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/Util$ClassContextSecurityManager.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/Util$ClassContextSecurityManager.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/helpers/Util.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/helpers/Util.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/ILoggerFactory.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/ILoggerFactory.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/IMarkerFactory.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/IMarkerFactory.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/Logger.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/Logger.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/LoggerFactory.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/LoggerFactory.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/LoggerFactoryFriend.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/LoggerFactoryFriend.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/Marker.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/Marker.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/MarkerFactory.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/MarkerFactory.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/MDC$1.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/MDC$1.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/MDC$MDCCloseable.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/MDC$MDCCloseable.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/MDC.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/MDC.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/CallerBoundaryAware.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/CallerBoundaryAware.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/DefaultLoggingEventBuilder$1.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/DefaultLoggingEventBuilder$1.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/DefaultLoggingEventBuilder.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/DefaultLoggingEventBuilder.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/LocationAwareLogger.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/LocationAwareLogger.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/LoggerFactoryBinder.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/LoggerFactoryBinder.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/LoggingEventAware.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/LoggingEventAware.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/LoggingEventBuilder.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/LoggingEventBuilder.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/MarkerFactoryBinder.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/MarkerFactoryBinder.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/MDCAdapter.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/MDCAdapter.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/NOPLoggingEventBuilder.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/NOPLoggingEventBuilder.class são diferentes
+Os arquivos binários slf4j/slf4j-api/target/classes/org/slf4j/spi/SLF4JServiceProvider.class e real-slf4j-master/slf4j-api/target/classes/org/slf4j/spi/SLF4JServiceProvider.class são diferentes
+diff -ruN slf4j/slf4j-api/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst real-slf4j-master/slf4j-api/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+--- slf4j/slf4j-api/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst	1969-12-31 21:00:00.000000000 -0300
++++ real-slf4j-master/slf4j-api/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst	2026-02-21 12:27:18.727997292 -0300
+@@ -0,0 +1,55 @@
++org/slf4j/helpers/SubstituteLogger.class
++org/slf4j/helpers/Reporter.class
++org/slf4j/helpers/NamedLoggerBase.class
++org/slf4j/helpers/NOP_FallbackServiceProvider.class
++org/slf4j/spi/DefaultLoggingEventBuilder.class
++org/slf4j/spi/LoggingEventAware.class
++org/slf4j/helpers/Reporter$Level.class
++org/slf4j/spi/LocationAwareLogger.class
++org/slf4j/helpers/MessageFormatter.class
++org/slf4j/helpers/Util$ClassContextSecurityManager.class
++org/slf4j/IMarkerFactory.class
++org/slf4j/MDC.class
++org/slf4j/event/LoggingEvent.class
++org/slf4j/spi/CallerBoundaryAware.class
++org/slf4j/helpers/SubstituteLoggerFactory.class
++org/slf4j/spi/LoggingEventBuilder.class
++org/slf4j/helpers/FormattingTuple.class
++org/slf4j/helpers/NormalizedParameters.class
++org/slf4j/helpers/LegacyAbstractLogger.class
++org/slf4j/helpers/BasicMarkerFactory.class
++org/slf4j/spi/MarkerFactoryBinder.class
++org/slf4j/event/DefaultLoggingEvent.class
++org/slf4j/spi/NOPLoggingEventBuilder.class
++org/slf4j/helpers/NOPMDCAdapter.class
++org/slf4j/MarkerFactory.class
++org/slf4j/helpers/SubstituteServiceProvider.class
++org/slf4j/helpers/BasicMarker.class
++org/slf4j/spi/LoggerFactoryBinder.class
++org/slf4j/MDC$MDCCloseable.class
++org/slf4j/helpers/Slf4jEnvUtil.class
++org/slf4j/ILoggerFactory.class
++org/slf4j/helpers/BasicMDCAdapter$1.class
++org/slf4j/helpers/BasicMDCAdapter.class
++org/slf4j/LoggerFactory.class
++org/slf4j/spi/MDCAdapter.class
++org/slf4j/helpers/Util.class
++org/slf4j/helpers/AbstractLogger.class
++org/slf4j/spi/DefaultLoggingEventBuilder$1.class
++org/slf4j/spi/SLF4JServiceProvider.class
++org/slf4j/helpers/NOPLogger.class
++org/slf4j/helpers/Reporter$TargetChoice.class
++org/slf4j/helpers/NOPLoggerFactory.class
++org/slf4j/helpers/ThreadLocalMapOfStacks.class
++org/slf4j/LoggerFactoryFriend.class
++org/slf4j/event/SubstituteLoggingEvent.class
++org/slf4j/helpers/Util$1.class
++org/slf4j/Logger.class
++org/slf4j/Marker.class
++org/slf4j/MDC$1.class
++org/slf4j/event/EventConstants.class
++org/slf4j/event/EventRecordingLogger.class
++org/slf4j/helpers/CheckReturnValue.class
++org/slf4j/helpers/MarkerIgnoringBase.class
++org/slf4j/event/KeyValuePair.class
++org/slf4j/event/Level.class
+diff -ruN slf4j/slf4j-api/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst real-slf4j-master/slf4j-api/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+--- slf4j/slf4j-api/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst	1969-12-31 21:00:00.000000000 -0300
++++ real-slf4j-master/slf4j-api/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst	2026-02-21 12:27:18.727997292 -0300
+@@ -0,0 +1,47 @@
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/Logger.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/NOPMDCAdapter.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/MDCAdapter.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/Marker.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/NamedLoggerBase.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/SubstituteLoggerFactory.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/CallerBoundaryAware.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/BasicMarker.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/Reporter.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/Util.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/NOPLoggingEventBuilder.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/AbstractLogger.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/SubstituteLogger.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/SubstituteServiceProvider.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/Level.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/LocationAwareLogger.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/CheckReturnValue.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/MarkerFactoryBinder.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/EventRecordingLogger.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/LegacyAbstractLogger.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/KeyValuePair.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/LoggingEventBuilder.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/LoggingEvent.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/MDC.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/LoggerFactory.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/Slf4jEnvUtil.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/IMarkerFactory.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/ThreadLocalMapOfStacks.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/LoggerFactoryBinder.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/MarkerIgnoringBase.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/SubstituteLoggingEvent.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/LoggingEventAware.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/LoggerFactoryFriend.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/MessageFormatter.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/MarkerFactory.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/ILoggerFactory.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/NOPLoggerFactory.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/FormattingTuple.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/NOP_FallbackServiceProvider.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/NOPLogger.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/EventConstants.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/event/DefaultLoggingEvent.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/BasicMDCAdapter.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/SLF4JServiceProvider.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/BasicMarkerFactory.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/spi/DefaultLoggingEventBuilder.java
++/home/ana/real/SLF4J-real-evolucao/real-slf4j-master/slf4j-api/src/main/java/org/slf4j/helpers/NormalizedParameters.java
+diff -ruN slf4j/slf4j-simple/src/main/java/org/slf4j/simple/OutputChoice.java real-slf4j-master/slf4j-simple/src/main/java/org/slf4j/simple/OutputChoice.java
+--- slf4j/slf4j-simple/src/main/java/org/slf4j/simple/OutputChoice.java	2026-02-21 12:51:06.272539771 -0300
++++ real-slf4j-master/slf4j-simple/src/main/java/org/slf4j/simple/OutputChoice.java	2026-02-21 11:39:51.873385335 -0300
+@@ -4,9 +4,8 @@
+ 
+ /**
+  * This class encapsulates the user's choice of output target.
+- * 
+- * @author Ceki G&uuml;lc&uuml;
+  *
++ * @author Ceki G&uuml;lc&uuml;
+  */
+ class OutputChoice {
+ 
+@@ -17,39 +16,44 @@
+     final OutputChoiceType outputChoiceType;
+     final PrintStream targetPrintStream;
+ 
+-    OutputChoice(OutputChoiceType outputChoiceType) {
+-        if (outputChoiceType == OutputChoiceType.FILE) {
+-            throw new IllegalArgumentException();
+-        }
++    private OutputChoice(OutputChoiceType outputChoiceType, PrintStream targetPrintStream) {
+         this.outputChoiceType = outputChoiceType;
+-        if (outputChoiceType == OutputChoiceType.CACHED_SYS_OUT) {
+-            this.targetPrintStream = System.out;
+-        } else if (outputChoiceType == OutputChoiceType.CACHED_SYS_ERR) {
+-            this.targetPrintStream = System.err;
+-        } else {
+-            this.targetPrintStream = null;
++        this.targetPrintStream = targetPrintStream;
++    }
++
++    static OutputChoice forSysOut(boolean cached) {
++        if (cached) {
++            return new OutputChoice(OutputChoiceType.CACHED_SYS_OUT, System.out);
+         }
++        return new OutputChoice(OutputChoiceType.SYS_OUT, null);
+     }
+ 
+-    OutputChoice(PrintStream printStream) {
+-        this.outputChoiceType = OutputChoiceType.FILE;
+-        this.targetPrintStream = printStream;
++    static OutputChoice forSysErr(boolean cached) {
++        if (cached) {
++            return new OutputChoice(OutputChoiceType.CACHED_SYS_ERR, System.err);
++        }
++        return new OutputChoice(OutputChoiceType.SYS_ERR, null);
++    }
++
++    static OutputChoice forFile(PrintStream printStream) {
++        if (printStream == null) {
++            throw new IllegalArgumentException("printStream must not be null");
++        }
++        return new OutputChoice(OutputChoiceType.FILE, printStream);
+     }
+ 
+     PrintStream getTargetPrintStream() {
+         switch (outputChoiceType) {
+-        case SYS_OUT:
+-            return System.out;
+-        case SYS_ERR:
+-            return System.err;
+-        case CACHED_SYS_ERR:
+-        case CACHED_SYS_OUT:
+-        case FILE:
+-            return targetPrintStream;
+-        default:
+-            throw new IllegalArgumentException();
++            case SYS_OUT:
++                return System.out;
++            case SYS_ERR:
++                return System.err;
++            case CACHED_SYS_ERR:
++            case CACHED_SYS_OUT:
++            case FILE:
++                return targetPrintStream;
++            default:
++                throw new IllegalArgumentException();
+         }
+-
+     }
+-
+-}
++}
+\ Nenhum caractere de nova linha no final do arquivo
+diff -ruN slf4j/slf4j-simple/src/main/java/org/slf4j/simple/SimpleLoggerConfiguration.java real-slf4j-master/slf4j-simple/src/main/java/org/slf4j/simple/SimpleLoggerConfiguration.java
+--- slf4j/slf4j-simple/src/main/java/org/slf4j/simple/SimpleLoggerConfiguration.java	2026-02-21 12:51:06.272539771 -0300
++++ real-slf4j-master/slf4j-simple/src/main/java/org/slf4j/simple/SimpleLoggerConfiguration.java	2026-02-21 11:39:51.873385335 -0300
+@@ -39,7 +39,7 @@
+     boolean showDateTime = SHOW_DATE_TIME_DEFAULT;
+ 
+     private static final String DATE_TIME_FORMAT_STR_DEFAULT = null;
+-    private static String dateTimeFormatStr = DATE_TIME_FORMAT_STR_DEFAULT;
++    private String dateTimeFormatStr = DATE_TIME_FORMAT_STR_DEFAULT;
+ 
+     DateFormat dateFormatter = null;
+ 
+@@ -168,24 +168,24 @@
+     }
+ 
+     private static OutputChoice computeOutputChoice(String logFile, boolean cacheOutputStream) {
+-        if ("System.err".equalsIgnoreCase(logFile))
+-            if (cacheOutputStream)
+-                return new OutputChoice(OutputChoiceType.CACHED_SYS_ERR);
+-            else
+-                return new OutputChoice(OutputChoiceType.SYS_ERR);
+-        else if ("System.out".equalsIgnoreCase(logFile)) {
+-            if (cacheOutputStream)
+-                return new OutputChoice(OutputChoiceType.CACHED_SYS_OUT);
+-            else
+-                return new OutputChoice(OutputChoiceType.SYS_OUT);
++        if ("System.err".equalsIgnoreCase(logFile)) {
++            return OutputChoice.forSysErr(cacheOutputStream);
++        } else if ("System.out".equalsIgnoreCase(logFile)) {
++            return OutputChoice.forSysOut(cacheOutputStream);
+         } else {
+             try {
+                 FileOutputStream fos = new FileOutputStream(logFile);
+-                PrintStream printStream = new PrintStream(fos);
+-                return new OutputChoice(printStream);
++                PrintStream printStream;
++                try {
++                    printStream = new PrintStream(fos, true, "UTF-8");
++                } catch (java.io.UnsupportedEncodingException e) {
++                    Reporter.error("UTF-8 encoding not supported. Defaulting to system encoding.", e);
++                    printStream = new PrintStream(fos, true);
++                }
++                return OutputChoice.forFile(printStream);
+             } catch (FileNotFoundException e) {
+                 Reporter.error("Could not open [" + logFile + "]. Defaulting to System.err", e);
+-                return new OutputChoice(OutputChoiceType.SYS_ERR);
++                return OutputChoice.forSysErr(false);
+             }
+         }
+     }
+diff -ruN slf4j/slf4j-simple/src/main/java/org/slf4j/simple/SimpleLogger.java real-slf4j-master/slf4j-simple/src/main/java/org/slf4j/simple/SimpleLogger.java
+--- slf4j/slf4j-simple/src/main/java/org/slf4j/simple/SimpleLogger.java	2026-02-21 12:51:06.272539771 -0300
++++ real-slf4j-master/slf4j-simple/src/main/java/org/slf4j/simple/SimpleLogger.java	2026-02-21 11:39:51.873385335 -0300
+@@ -235,7 +235,7 @@
+         }
+     }
+ 
+-    String recursivelyComputeLevelString() {
++    final String recursivelyComputeLevelString() {
+         String tempName = name;
+         String levelString = null;
+         int indexOfLastDot = tempName.length();
+@@ -377,66 +377,77 @@
+         innerHandleNormalizedLoggingCall(level, markers, messagePattern, arguments, throwable);
+     }
+ 
+-    private void innerHandleNormalizedLoggingCall(Level level, List<Marker> markers, String messagePattern, Object[] arguments, Throwable t) {
++    private void innerHandleNormalizedLoggingCall(Level level, List<Marker> markers,
++                                                  String messagePattern, Object[] arguments, Throwable t) {
+ 
+         StringBuilder buf = new StringBuilder(32);
+ 
+-        // Append date-time if so configured
++        appendDateTime(buf);
++        appendThreadInfo(buf);
++        appendLevel(buf, level);
++        appendLoggerName(buf);
++        appendMarkers(buf, markers);
++
++        String formattedMessage = MessageFormatter.basicArrayFormat(messagePattern, arguments);
++        buf.append(formattedMessage);
++
++        write(buf, t);
++    }
++
++    private void appendDateTime(StringBuilder buf) {
+         if (CONFIG_PARAMS.showDateTime) {
+             if (CONFIG_PARAMS.dateFormatter != null) {
+                 buf.append(getFormattedDate());
+-                buf.append(SP);
+             } else {
+                 buf.append(System.currentTimeMillis() - START_TIME);
+-                buf.append(SP);
+             }
++            buf.append(SP);
+         }
++    }
+ 
+-        // Append current thread name if so configured
++    private void appendThreadInfo(StringBuilder buf) {
+         if (CONFIG_PARAMS.showThreadName) {
+-            buf.append('[');
+-            buf.append(Thread.currentThread().getName());
+-            buf.append("] ");
++            buf.append('[')
++                    .append(Thread.currentThread().getName())
++                    .append("] ");
+         }
+-        
++
+         if (CONFIG_PARAMS.showThreadId) {
+-            buf.append(TID_PREFIX);
+-            buf.append(Thread.currentThread().getId());
+-            buf.append(SP);
++            buf.append(TID_PREFIX)
++                    .append(Thread.currentThread().getId())
++                    .append(SP);
+         }
++    }
+ 
++    private void appendLevel(StringBuilder buf, Level level) {
+         if (CONFIG_PARAMS.levelInBrackets)
+             buf.append('[');
+ 
+-        // Append a readable representation of the log level
+-        String levelStr = renderLevel(level.toInt());
+-        buf.append(levelStr);
++        buf.append(renderLevel(level.toInt()));
++
+         if (CONFIG_PARAMS.levelInBrackets)
+             buf.append(']');
++
+         buf.append(SP);
++    }
+ 
+-        // Append the name of the log instance if so configured
++    private void appendLoggerName(StringBuilder buf) {
+         if (CONFIG_PARAMS.showShortLogName) {
+             if (shortLogName == null)
+                 shortLogName = computeShortName();
+-            buf.append(String.valueOf(shortLogName)).append(" - ");
++            buf.append(shortLogName).append(" - ");
+         } else if (CONFIG_PARAMS.showLogName) {
+-            buf.append(String.valueOf(name)).append(" - ");
++            buf.append(name).append(" - ");
+         }
++    }
+ 
++    private void appendMarkers(StringBuilder buf, List<Marker> markers) {
+         if (markers != null) {
+             buf.append(SP);
+             for (Marker marker : markers) {
+                 buf.append(marker.getName()).append(SP);
+             }
+         }
+-
+-        String formattedMessage = MessageFormatter.basicArrayFormat(messagePattern, arguments);
+-
+-        // Append the message
+-        buf.append(formattedMessage);
+-
+-        write(buf, t);
+     }
+ 
+     protected String renderLevel(int levelInt) {
+diff -ruN slf4j/slf4j-simple/src/main/java/org/slf4j/simple/SimpleServiceProvider.java real-slf4j-master/slf4j-simple/src/main/java/org/slf4j/simple/SimpleServiceProvider.java
+--- slf4j/slf4j-simple/src/main/java/org/slf4j/simple/SimpleServiceProvider.java	2026-02-21 12:51:06.272539771 -0300
++++ real-slf4j-master/slf4j-simple/src/main/java/org/slf4j/simple/SimpleServiceProvider.java	2026-02-21 11:39:51.873385335 -0300
+@@ -10,8 +10,8 @@
+ public class SimpleServiceProvider implements SLF4JServiceProvider {
+ 
+     /**
+-     * Declare the version of the SLF4J API this implementation is compiled against. 
+-     * The value of this field is modified with each major release. 
++     * Declare the version of the SLF4J API this implementation is compiled against.
++     * The value of this field is modified with each major release.
+      */
+     // to avoid constant folding by the compiler, this field must *not* be final
+     public static String REQUESTED_API_VERSION = "2.0.99"; // !final
+diff -ruN slf4j/slf4j-simple/src/test/java/org/slf4j/simple/AcceptanceTest.java real-slf4j-master/slf4j-simple/src/test/java/org/slf4j/simple/AcceptanceTest.java
+--- slf4j/slf4j-simple/src/test/java/org/slf4j/simple/AcceptanceTest.java	2026-02-21 12:51:06.272539771 -0300
++++ real-slf4j-master/slf4j-simple/src/test/java/org/slf4j/simple/AcceptanceTest.java	2026-02-21 11:39:51.873385335 -0300
+@@ -11,7 +11,8 @@
+ 
+     @Override
+     public Logger createLogger(ListAppendingOutputStream outputStream, Level level) {
+-        SimpleLogger.CONFIG_PARAMS.outputChoice = new OutputChoice(new PrintStream(outputStream));
++        SimpleLogger.CONFIG_PARAMS.outputChoice =
++                OutputChoice.forFile(new PrintStream(outputStream));
+ 
+         SimpleLogger logger = new SimpleLogger("TestSuiteLogger");
+         logger.currentLogLevel = SimpleLoggerConfiguration.stringToLevel(level.toString());
+diff -ruN slf4j/slf4j-simple/src/test/java/org/slf4j/simple/ConfigParamsTest.java real-slf4j-master/slf4j-simple/src/test/java/org/slf4j/simple/ConfigParamsTest.java
+--- slf4j/slf4j-simple/src/test/java/org/slf4j/simple/ConfigParamsTest.java	2026-02-21 12:51:06.272539771 -0300
++++ real-slf4j-master/slf4j-simple/src/test/java/org/slf4j/simple/ConfigParamsTest.java	2026-02-21 11:39:51.873385335 -0300
+@@ -29,7 +29,8 @@
+     }
+ 
+     public Logger createLogger(ListAppendingOutputStream outputStream, Level level, String warnLevelString) {
+-        SimpleLogger.CONFIG_PARAMS.outputChoice = new OutputChoice(new PrintStream(outputStream));
++        SimpleLogger.CONFIG_PARAMS.outputChoice =
++                OutputChoice.forFile(new PrintStream(outputStream));
+ 
+         SimpleLogger.CONFIG_PARAMS.warnLevelString = warnLevelString;
+ 

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>SpotBugs - slf4j-reload4j</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --card: #121a33;
+    --text: #e7ecff;
+    --muted: #aab3d6;
+    --border: rgba(255,255,255,.12);
+    --pill: rgba(255,255,255,.12);
+  }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
+  header { padding:24px 20px 10px; max-width:1200px; margin:0 auto; }
+  h1 { margin:0 0 6px; font-size:22px; }
+  .meta { color:var(--muted); font-size:13px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin:16px auto 0; max-width:1200px; padding:0 20px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 14px 10px; }
+  .card h2 { font-size:14px; margin:0 0 8px; color:var(--muted); font-weight:600; }
+  .counts { list-style:none; padding:0; margin:0; display:flex; flex-wrap:wrap; gap:8px; }
+  .counts li { background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:999px; padding:6px 10px; font-size:12px; }
+  .counts code { color:var(--text); }
+  .count { color:var(--muted); margin-left:6px; }
+  .toolbar { max-width:1200px; margin:12px auto 0; padding:0 20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  input, select { background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:9px 10px; font-size:13px; }
+  input::placeholder { color:rgba(231,236,255,.55); }
+  .table-wrap { max-width:1200px; margin:10px auto 30px; padding:0 20px; }
+  table { width:100%; border-collapse:separate; border-spacing:0; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  thead th { text-align:left; font-size:12px; color:var(--muted); padding:10px 10px; border-bottom:1px solid var(--border); position:sticky; top:0; background:linear-gradient(to bottom, rgba(18,26,51,.98), rgba(18,26,51,.92)); }
+  tbody td { padding:10px 10px; border-bottom:1px solid rgba(255,255,255,.06); vertical-align:top; font-size:13px; }
+  tbody tr:last-child td { border-bottom:none; }
+  .num { width:44px; color:var(--muted); }
+  .msg .sub, td .sub { margin-top:4px; color:var(--muted); font-size:12px; line-height:1.35; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; }
+  .pill { display:inline-block; padding:4px 9px; border-radius:999px; background:var(--pill); border:1px solid var(--border); font-size:12px; }
+  .p1 { background:rgba(255,70,70,.18); border-color:rgba(255,70,70,.35); }
+  .p2 { background:rgba(255,170,60,.18); border-color:rgba(255,170,60,.35); }
+  .p3 { background:rgba(100,210,140,.16); border-color:rgba(100,210,140,.3); }
+  .hidden { display:none; }
+  .footer { max-width:1200px; margin:0 auto; padding:0 20px 24px; color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Relatório SpotBugs (HTML) — slf4j-reload4j</h1>
+  <div class="meta">Gerado em 2026-02-21 17:30:10 • Total de issues: <strong>2</strong></div>
+</header>
+
+<section class="grid">
+  <div class="card">
+    <h2>Por prioridade</h2>
+    <ul class='counts'><li><code>2</code> <span class="count">1</span></li><li><code>1</code> <span class="count">1</span></li></ul>
+  </div>
+  <div class="card">
+    <h2>Por categoria</h2>
+    <ul class='counts'><li><code>STYLE</code> <span class="count">1</span></li><li><code>MALICIOUS_CODE</code> <span class="count">1</span></li></ul>
+  </div>
+  <div class="card">
+    <h2>Top tipos</h2>
+    <ul class='counts'><li><code>DLS_DEAD_LOCAL_STORE</code> <span class="count">1</span></li><li><code>MS_SHOULD_BE_FINAL</code> <span class="count">1</span></li></ul>
+  </div>
+</section>
+
+<div class="toolbar">
+  <input id="q" type="search" placeholder="Buscar (mensagem, classe, método, arquivo…)"/>
+  <select id="priority">
+    <option value="">Todas as prioridades</option>
+    <option value="1">P1</option>
+    <option value="2">P2</option>
+    <option value="3">P3</option>
+  </select>
+  <input id="category" type="text" placeholder="Filtrar categoria (ex: BAD_PRACTICE)"/>
+  <div class="meta" id="shown"></div>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Prioridade</th>
+      <th>Categoria</th>
+      <th>Tipo</th>
+      <th>Mensagem</th>
+      <th>Elemento</th>
+      <th>Local</th>
+    </tr>
+  </thead>
+  <tbody id="tbody">
+    
+        <tr data-priority="2" data-category="STYLE" data-type="DLS_DEAD_LOCAL_STORE">
+          <td class="num">1</td>
+          <td><span class="pill p2">P2</span></td>
+          <td><code>STYLE</code></td>
+          <td><code>DLS_DEAD_LOCAL_STORE</code></td>
+          <td class="msg">Dead store to local variable<div class="sub">Dead store to $L1 in new org.slf4j.reload4j.Reload4jServiceProvider()</div></td>
+          <td><code>org.slf4j.reload4j.Reload4jServiceProvider</code></td>
+          <td><code>org/slf4j/reload4j/Reload4jServiceProvider.java:35</code></td>
+        </tr>
+        
+        <tr data-priority="1" data-category="MALICIOUS_CODE" data-type="MS_SHOULD_BE_FINAL">
+          <td class="num">2</td>
+          <td><span class="pill p1">P1</span></td>
+          <td><code>MALICIOUS_CODE</code></td>
+          <td><code>MS_SHOULD_BE_FINAL</code></td>
+          <td class="msg">Field isn&#x27;t final but should be<div class="sub">org.slf4j.reload4j.Reload4jServiceProvider.REQUESTED_API_VERSION isn&#x27;t final but should be</div></td>
+          <td><code>org.slf4j.reload4j.Reload4jServiceProvider</code></td>
+          <td><code>org/slf4j/reload4j/Reload4jServiceProvider.java:19</code></td>
+        </tr>
+        
+  </tbody>
+</table>
+</div>
+
+<div class="footer">
+  Fonte: arquivo SpotBugs XML (slf4j-reload4j). Este HTML foi gerado automaticamente a partir do XML.
+</div>
+
+<script>
+(function(){
+  const q = document.getElementById('q');
+  const pr = document.getElementById('priority');
+  const cat = document.getElementById('category');
+  const tbody = document.getElementById('tbody');
+  const shown = document.getElementById('shown');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  function norm(s){ return (s||'').toLowerCase(); }
+  function apply(){
+    const qq = norm(q.value.trim());
+    const p = pr.value.trim();
+    const c = norm(cat.value.trim());
+    let visible = 0;
+    for (const r of rows){
+      const rp = r.getAttribute('data-priority') || '';
+      const rc = norm(r.getAttribute('data-category') || '');
+      const text = norm(r.innerText || '');
+      let ok = true;
+      if (p && rp !== p) ok = false;
+      if (c && !rc.includes(c)) ok = false;
+      if (qq && !text.includes(qq)) ok = false;
+      r.classList.toggle('hidden', !ok);
+      if (ok) visible++;
+    }
+    shown.textContent = `Mostrando ${visible} de 2 issues`;
+  }
+  q.addEventListener('input', apply);
+  pr.addEventListener('change', apply);
+  cat.addEventListener('input', apply);
+  apply();
+})();
+</script>
+</body>
+</html>
